@@ -2,12 +2,13 @@
 
 package org.openbot.env;
 
+import android.util.Pair;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.widget.Toast;
-import org.openbot.common.Enums.DriveMode;
-import org.openbot.robot.CameraActivity;
+import org.openbot.OpenBotApplication;
+import org.openbot.utils.Enums.DriveMode;
 
 public class GameController {
   private float left = 0;
@@ -53,26 +54,26 @@ public class GameController {
   public void processButtonInput(KeyEvent event) {
     switch (event.getKeyCode()) {
       case KeyEvent.KEYCODE_BUTTON_A:
-        Toast.makeText(CameraActivity.getContext(), "A recognized", Toast.LENGTH_SHORT).show();
+        Toast.makeText(OpenBotApplication.getContext(), "A recognized", Toast.LENGTH_SHORT).show();
         return;
       case KeyEvent.KEYCODE_BUTTON_B:
-        Toast.makeText(CameraActivity.getContext(), "B recognized", Toast.LENGTH_SHORT).show();
+        Toast.makeText(OpenBotApplication.getContext(), "B recognized", Toast.LENGTH_SHORT).show();
         return;
       case KeyEvent.KEYCODE_BUTTON_Y:
-        Toast.makeText(CameraActivity.getContext(), "Y recognized", Toast.LENGTH_SHORT).show();
+        Toast.makeText(OpenBotApplication.getContext(), "Y recognized", Toast.LENGTH_SHORT).show();
         return;
       case KeyEvent.KEYCODE_BUTTON_X:
-        Toast.makeText(CameraActivity.getContext(), "X recognized", Toast.LENGTH_SHORT).show();
+        Toast.makeText(OpenBotApplication.getContext(), "X recognized", Toast.LENGTH_SHORT).show();
         return;
       case KeyEvent.KEYCODE_BUTTON_L1:
-        Toast.makeText(CameraActivity.getContext(), "L1 recognized", Toast.LENGTH_SHORT).show();
+        Toast.makeText(OpenBotApplication.getContext(), "L1 recognized", Toast.LENGTH_SHORT).show();
         return;
       case KeyEvent.KEYCODE_BUTTON_R1:
-        Toast.makeText(CameraActivity.getContext(), "R1 recognized", Toast.LENGTH_SHORT).show();
+        Toast.makeText(OpenBotApplication.getContext(), "R1 recognized", Toast.LENGTH_SHORT).show();
         return;
       default:
         Toast.makeText(
-                CameraActivity.getContext(),
+                OpenBotApplication.getContext(),
                 "Key " + event.getKeyCode() + " not recognized",
                 Toast.LENGTH_SHORT)
             .show();
@@ -169,5 +170,35 @@ public class GameController {
     }
 
     return new Control(left, right);
+  }
+
+  public static Pair<Float, Float> processJoystickInputLeft(MotionEvent event, int historyPos) {
+
+    // Calculate the horizontal distance to move by
+    // using the input value from one of these physical controls:
+    // the left control stick, hat axis, or the right control stick.
+    float x = getCenteredAxis(event, MotionEvent.AXIS_X, historyPos);
+
+    // Calculate the vertical distance to move by
+    // using the input value from one of these physical controls:
+    // the left control stick, hat switch, or the right control stick.
+    float y = getCenteredAxis(event, MotionEvent.AXIS_Y, historyPos);
+
+    return new Pair<>(x, y);
+  }
+
+  public static Pair<Float, Float> processJoystickInputRight(MotionEvent event, int historyPos) {
+
+    // Calculate the horizontal distance to move by
+    // using the input value from one of these physical controls:
+    // the left control stick, hat axis, or the right control stick.
+    float x = getCenteredAxis(event, MotionEvent.AXIS_Z, historyPos);
+
+    // Calculate the vertical distance to move by
+    // using the input value from one of these physical controls:
+    // the left control stick, hat switch, or the right control stick.
+    float y = getCenteredAxis(event, MotionEvent.AXIS_RZ, historyPos);
+
+    return new Pair<>(x, y);
   }
 }

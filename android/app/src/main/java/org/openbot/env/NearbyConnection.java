@@ -39,7 +39,8 @@ import java.util.TimerTask;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.openbot.robot.CameraActivity;
+import org.openbot.OpenBotApplication;
+import org.openbot.utils.ConnectionUtils;
 import timber.log.Timber;
 
 public class NearbyConnection implements ILocalConnection {
@@ -51,6 +52,7 @@ public class NearbyConnection implements ILocalConnection {
   private final CancelableDiscovery discovery = new CancelableDiscovery(this);
   private boolean isConnected = false;
   private IDataReceived dataReceivedCallback;
+  private boolean stopped = true;
 
   // Our handle to Nearby Connections
   private ConnectionsClient connectionsClient;
@@ -63,8 +65,10 @@ public class NearbyConnection implements ILocalConnection {
       new PayloadCallback() {
         @Override
         public void onPayloadReceived(@NotNull String endpointId, Payload payload) {
-          String commandStr = new String(payload.asBytes(), StandardCharsets.UTF_8);
-          dataReceivedCallback.dataReceived(commandStr);
+          if (!stopped) {
+            String commandStr = new String(payload.asBytes(), StandardCharsets.UTF_8);
+            dataReceivedCallback.dataReceived(commandStr);
+          }
         }
 
         @Override
@@ -145,7 +149,7 @@ public class NearbyConnection implements ILocalConnection {
             Timber.i("onConnectionResult: connection successful");
             beep();
             Toast.makeText(
-                    CameraActivity.getContext(),
+                    OpenBotApplication.getContext(),
                     "Smartphone controller connected",
                     Toast.LENGTH_LONG)
                 .show();
@@ -161,7 +165,7 @@ public class NearbyConnection implements ILocalConnection {
             Timber.i("onConnectionResult: connection failed");
             isConnected = false;
             Toast.makeText(
-                    CameraActivity.getContext(),
+                    OpenBotApplication.getContext(),
                     "Smartphone controller failed to connect",
                     Toast.LENGTH_LONG)
                 .show();
@@ -172,7 +176,7 @@ public class NearbyConnection implements ILocalConnection {
         public void onDisconnected(@NonNull String endpointId) {
           isConnected = false;
           Toast.makeText(
-                  CameraActivity.getContext(),
+                  OpenBotApplication.getContext(),
                   "Smartphone controller disconnected",
                   Toast.LENGTH_LONG)
               .show();
@@ -226,7 +230,7 @@ public class NearbyConnection implements ILocalConnection {
         .addOnFailureListener(
             e -> Timber.d("We were unable to start startDiscovery. Error: %s", e.toString()));
     Toast.makeText(
-            CameraActivity.getContext(),
+            OpenBotApplication.getContext(),
             "Searching for smartphone controller...",
             Toast.LENGTH_LONG)
         .show();
@@ -254,6 +258,23 @@ public class NearbyConnection implements ILocalConnection {
     } catch (Throwable t) {
       Timber.d(t, "Something went wrong while sending");
     }
+  }
+
+  @Override
+  public void stop() {
+    stopped = true;
+    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("CONNECTION_ACTIVE", false));
+  }
+
+  @Override
+  public void start() {
+    stopped = false;
+    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("CONNECTION_ACTIVE", true));
+  }
+
+  @Override
+  public boolean isVideoCapable() {
+    return false;
   }
 
   public class CancelableDiscovery {

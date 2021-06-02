@@ -13,10 +13,9 @@ import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import org.openbot.R;
 import org.openbot.common.FeatureList;
-import org.openbot.common.OnItemClickListener;
 import org.openbot.databinding.FragmentMainBinding;
 import org.openbot.model.SubCategory;
-import org.openbot.robot.NetworkActivity;
+import org.openbot.original.DefaultActivity;
 import timber.log.Timber;
 
 public class MainFragment extends Fragment implements OnItemClickListener<SubCategory> {
@@ -50,7 +49,7 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
 
     switch (subCategory.getTitle()) {
       case FeatureList.DEFAULT:
-        Intent intent = new Intent(requireActivity(), NetworkActivity.class);
+        Intent intent = new Intent(requireActivity(), DefaultActivity.class);
         startActivity(intent);
         break;
 
@@ -62,11 +61,30 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
       case FeatureList.DATA_COLLECTION:
         Navigation.findNavController(requireView())
             .navigate(R.id.action_mainFragment_to_loggerFragment);
+        break;
 
       case FeatureList.CONTROLLER:
         // For a library module, uncomment the following line
         // intent = new Intent(this, ControllerActivity.class);
         // startActivity(intent);
+        break;
+      case FeatureList.AUTOPILOT:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_autopilotFragment);
+        break;
+
+      case FeatureList.OBJECT_NAV:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_objectNavFragment);
+        break;
+
+      case FeatureList.CONTROLLER_MAPPING:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_controllerMappingFragment);
+        break;
+      case FeatureList.MODEL_MANAGEMENT:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_modelManagementFragment);
         break;
     }
   }

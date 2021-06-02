@@ -12,9 +12,7 @@ package org.openbot.controller
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -22,7 +20,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -45,15 +42,16 @@ class ControllerActivity : /*AppCompat*/ Activity() { // for some reason AppComp
         binding = ActivityFullscreenBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-
         setupPermissions()
 
         screenManager = ScreenManager(binding)
+        ConnectionManager.init(this)
 
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         createAppEventsSubscription()
+        subscribeToStatusInfo()
 
         binding.leftDriveControl.setDirection(DualDriveSeekBar.LeftOrRight.LEFT)
         binding.rightDriveControl.setDirection(DualDriveSeekBar.LeftOrRight.RIGHT)
@@ -62,6 +60,8 @@ class ControllerActivity : /*AppCompat*/ Activity() { // for some reason AppComp
         hideSystemUI()
 
         BotDataListener.init()
+
+        binding.videoView.init(binding)
     }
 
     private fun setupPermissions() {
@@ -79,6 +79,14 @@ class ControllerActivity : /*AppCompat*/ Activity() { // for some reason AppComp
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
                 PERMISSION_REQUEST_LOCATION
         )
+    }
+
+    @SuppressLint("CheckResult")
+    private fun subscribeToStatusInfo () {
+        StatusEventBus.addSubject("CONNECTION_ACTIVE")
+        StatusEventBus.getProcessor("CONNECTION_ACTIVE")?.subscribe {
+            if (it.toBoolean()) screenManager.showControls() else screenManager.hideControls()
+        }
     }
 
     private fun createAppEventsSubscription(): Disposable =
@@ -102,13 +110,13 @@ class ControllerActivity : /*AppCompat*/ Activity() { // for some reason AppComp
                             }
                             EventProcessor.ProgressEvents.Disconnected -> {
                                 screenManager.hideControls()
-                                ConnectionFactory.get().connect(this)
+                                ConnectionManager.getConnection().connect(this)
                             }
                             EventProcessor.ProgressEvents.StopAdvertising -> {
                             }
                             EventProcessor.ProgressEvents.TemporaryConnectionProblem -> {
                                 screenManager.hideControls()
-                                ConnectionFactory.get().connect(this)
+                                ConnectionManager.getConnection().connect(this)
                             }
                             EventProcessor.ProgressEvents.AdvertisingFailed -> {
                                 screenManager.hideControls()
@@ -148,7 +156,7 @@ class ControllerActivity : /*AppCompat*/ Activity() { // for some reason AppComp
     @Override
     override fun onPause() {
         super.onPause()
-        ConnectionFactory.get().disconnect()
+        ConnectionManager.getConnection().disconnect()
     }
 
     @Override
@@ -156,8 +164,8 @@ class ControllerActivity : /*AppCompat*/ Activity() { // for some reason AppComp
         super.onResume()
         hideSystemUI()
 
-        ConnectionFactory.get().init(this)
-        ConnectionFactory.get().connect(this)
+        ConnectionManager.getConnection().init(this)
+        ConnectionManager.getConnection().connect(this)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int,

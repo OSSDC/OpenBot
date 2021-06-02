@@ -1,63 +1,86 @@
 package org.openbot.tflite;
 
 import android.util.Size;
-import androidx.annotation.NonNull;
+import com.google.gson.annotations.SerializedName;
 
 /** The model. */
 public class Model {
-  public enum ID {
-    AUTOPILOT_F,
-    DETECTOR_V1_1_0_Q,
-    DETECTOR_V3_S_Q,
-  }
 
-  public static final Model AUTOPILOT_F = new Model(ID.AUTOPILOT_F);
-  public static final Model DETECTOR_V1_1_0_Q = new Model(ID.DETECTOR_V1_1_0_Q);
-  public static final Model DETECTOR_V3_S_Q = new Model(ID.DETECTOR_V3_S_Q);
-
-  public final ID id;
-  public final String filename;
-
-  public static Model fromId(String id) {
-    switch (ID.valueOf(id)) {
-      case AUTOPILOT_F:
-        return AUTOPILOT_F;
-      case DETECTOR_V1_1_0_Q:
-        return DETECTOR_V1_1_0_Q;
-      case DETECTOR_V3_S_Q:
-        return DETECTOR_V3_S_Q;
-    }
-    throw new IllegalArgumentException("No model with id " + id);
-  }
-
-  private Model(ID id) {
+  public Model(
+      Integer id,
+      CLASS classType,
+      TYPE type,
+      String name,
+      PATH_TYPE pathType,
+      String path,
+      String inputSize) {
     this.id = id;
-    this.filename = null;
+    this.classType = classType;
+    this.type = type;
+    this.name = name;
+    this.pathType = pathType;
+    this.path = path;
+    this.inputSize = inputSize;
   }
 
-  public Model(String filename) {
-    this.id = ID.AUTOPILOT_F;
-    this.filename = filename;
+  public enum CLASS {
+    AUTOPILOT_F,
+    MOBILENETV1_1_0_Q,
+    MOBILENETV3_S_Q,
+    YOLOV4
   }
 
-  public static Size getCroppedImageSize(String id) {
-    switch (ID.valueOf(id)) {
-      case AUTOPILOT_F:
-        return new Size(256, 96);
-      case DETECTOR_V1_1_0_Q:
-        return new Size(300, 300);
-      case DETECTOR_V3_S_Q:
-        return new Size(320, 320);
-    }
-    throw new IllegalArgumentException("No size with id " + id);
+  public enum TYPE {
+    AUTOPILOT,
+    DETECTOR
   }
 
-  @NonNull
-  @Override
-  public String toString() {
-    if (filename != null) {
-      return filename;
-    }
-    return id.name();
+  public enum PATH_TYPE {
+    URL,
+    ASSET,
+    FILE
+  }
+
+  @SerializedName("class")
+  public CLASS classType;
+
+  public Integer id;
+
+  public TYPE type;
+  public String name;
+  public PATH_TYPE pathType;
+  public String path;
+  private String inputSize;
+
+  public String getName() {
+    return name;
+  }
+
+  public Size getInputSize() {
+    return Size.parseSize(inputSize);
+  }
+
+  public void setPath(String path) {
+    this.path = path;
+  }
+
+  public void setPathType(PATH_TYPE pathType) {
+    this.pathType = pathType;
+  }
+
+  public void setInputSize(String inputSize) {
+    this.inputSize = inputSize;
+  }
+
+  public void setName(String name) {
+    this.name = name;
+  }
+
+  public void setClassType(CLASS classType) {
+    this.classType = classType;
+  }
+
+  public void setType(TYPE type) {
+    this.type = type;
   }
 }

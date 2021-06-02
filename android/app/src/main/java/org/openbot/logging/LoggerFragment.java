@@ -21,34 +21,38 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.camera.core.ImageProxy;
+import androidx.navigation.Navigation;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 import org.openbot.R;
-import org.openbot.common.Constants;
-import org.openbot.common.Enums;
-import org.openbot.common.Utils;
+import org.openbot.common.CameraFragment;
 import org.openbot.databinding.FragmentLoggerBinding;
 import org.openbot.env.BotToControllerEventBus;
 import org.openbot.env.ImageUtils;
-import org.openbot.robot.CameraFragment;
-import org.openbot.robot.SensorService;
-import org.openbot.robot.ServerCommunication;
+import org.openbot.server.ServerCommunication;
+import org.openbot.server.ServerListener;
 import org.openbot.tflite.Model;
+import org.openbot.utils.ConnectionUtils;
+import org.openbot.utils.Constants;
+import org.openbot.utils.Enums;
 import org.openbot.utils.PermissionUtils;
 import org.zeroturnaround.zip.ZipUtil;
 import org.zeroturnaround.zip.commons.FileUtils;
 import timber.log.Timber;
 
-public class LoggerFragment extends CameraFragment implements ServerCommunication.ServerListener {
+public class LoggerFragment extends CameraFragment implements ServerListener {
 
   private FragmentLoggerBinding binding;
   private Handler handler;
@@ -90,7 +94,7 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
           if (controlMode != null) setControlMode(Enums.switchControlMode(controlMode));
         });
     binding.controllerContainer.driveMode.setOnClickListener(
-        v -> setDriveMode(Enums.switchDriveMode(currentDriveMode)));
+        v -> setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode())));
 
     binding.controllerContainer.speedMode.setOnClickListener(
         v ->
@@ -104,12 +108,25 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
 
     binding.cameraToggle.setOnClickListener(v -> toggleCamera());
 
+    List<String> models =
+        masterList.stream()
+            .filter(f -> f.pathType != Model.PATH_TYPE.URL)
+            .map(f -> org.openbot.utils.FileUtils.nameWithoutExtension(f.name))
+            .collect(Collectors.toList());
+
+    ArrayAdapter<String> modelAdapter =
+        new ArrayAdapter<>(requireContext(), R.layout.spinner_item, models);
+    modelAdapter.setDropDownViewResource(android.R.layout.simple_dropdown_item_1line);
+    binding.modelSpinner.setAdapter(modelAdapter);
     binding.modelSpinner.setOnItemSelectedListener(
         new AdapterView.OnItemSelectedListener() {
           @Override
           public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
             String selected = parent.getItemAtPosition(position).toString();
-            updateCropImageInfo(selected);
+            masterList.stream()
+                .filter(f -> f.name.contains(selected))
+                .findFirst()
+                .ifPresent(f -> updateCropImageInfo(f));
           }
 
           @Override
@@ -121,13 +138,13 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
           public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
             switch (position) {
               case 0:
-                setAnalyserResolution(Enums.Preview.FULL_HD.getValue());
+                setAnalyserResolution(Enums.Preview.SD.getValue());
                 break;
               case 1:
                 setAnalyserResolution(Enums.Preview.HD.getValue());
                 break;
               case 2:
-                setAnalyserResolution(Enums.Preview.SD.getValue());
+                setAnalyserResolution(Enums.Preview.FULL_HD.getValue());
                 break;
             }
           }
@@ -137,25 +154,37 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
         });
     BottomSheetBehavior.from(binding.loggerBottomSheet)
         .setState(BottomSheetBehavior.STATE_EXPANDED);
+
+    mViewModel
+        .getUsbStatus()
+        .observe(getViewLifecycleOwner(), status -> binding.usbToggle.setChecked(status));
+
+    binding.usbToggle.setChecked(vehicle.isUsbConnected());
+
+    binding.usbToggle.setOnClickListener(
+        v -> {
+          binding.usbToggle.setChecked(vehicle.isUsbConnected());
+          Navigation.findNavController(requireView()).navigate(R.id.open_settings_fragment);
+        });
   }
 
-  private void updateCropImageInfo(String selected) {
+  private void updateCropImageInfo(Model selected) {
     frameToCropTransform = null;
     binding.cropInfo.setText(
         String.format(
             Locale.US,
             "%d x %d",
-            Model.getCroppedImageSize(selected).getWidth(),
-            Model.getCroppedImageSize(selected).getHeight()));
+            selected.getInputSize().getWidth(),
+            selected.getInputSize().getHeight()));
 
     croppedBitmap =
         Bitmap.createBitmap(
-            Model.getCroppedImageSize(selected).getWidth(),
-            Model.getCroppedImageSize(selected).getHeight(),
+            selected.getInputSize().getWidth(),
+            selected.getInputSize().getHeight(),
             Bitmap.Config.ARGB_8888);
 
     sensorOrientation = 90 - ImageUtils.getScreenOrientation(requireActivity());
-    if (Model.fromId(selected) == Model.AUTOPILOT_F) {
+    if (selected.type == Model.TYPE.AUTOPILOT) {
       cropRect = new RectF(0.0f, 240.0f / 720.0f, 0.0f, 0.0f);
       maintainAspectRatio = true;
     } else {
@@ -166,28 +195,32 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
 
   @Override
   public synchronized void onResume() {
-    super.onResume();
-
-    handlerThread = new HandlerThread("inference");
-    handlerThread.start();
-    handler = new Handler(handlerThread.getLooper());
     serverCommunication = new ServerCommunication(requireContext(), this);
     serverCommunication.start();
+    handlerThread = new HandlerThread("logging");
+    handlerThread.start();
+    handler = new Handler(handlerThread.getLooper());
+    super.onResume();
   }
 
   @Override
   public synchronized void onPause() {
-
     handlerThread.quitSafely();
     try {
       handlerThread.join();
       handlerThread = null;
       handler = null;
-      serverCommunication.stop();
     } catch (final InterruptedException e) {
+      e.printStackTrace();
     }
-
+    serverCommunication.stop();
     super.onPause();
+  }
+
+  protected synchronized void runInBackground(final Runnable r) {
+    if (handler != null) {
+      handler.post(r);
+    }
   }
 
   Messenger sensorMessenger;
@@ -211,16 +244,6 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
     if (sensorMessenger != null) {
       try {
         sensorMessenger.send(LogDataUtils.generateFrameNumberMessage(frameNumber));
-      } catch (RemoteException e) {
-        e.printStackTrace();
-      }
-    }
-  }
-
-  protected void sendInferenceTimeToSensorService(long frameNumber, long inferenceTime) {
-    if (sensorMessenger != null) {
-      try {
-        sensorMessenger.send(LogDataUtils.generateInferenceTimeMessage(frameNumber, inferenceTime));
       } catch (RemoteException e) {
         e.printStackTrace();
       }
@@ -325,15 +348,9 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
       stopLogging();
       loggingEnabled = false;
     }
-    BotToControllerEventBus.emitEvent(Utils.createStatus("LOGS", loggingEnabled));
+    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("LOGS", loggingEnabled));
 
     binding.loggerSwitch.setChecked(loggingEnabled);
-  }
-
-  protected synchronized void runInBackground(final Runnable r) {
-    if (handler != null) {
-      handler.post(r);
-    }
   }
 
   @Override
@@ -366,7 +383,7 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
           if (PermissionUtils.shouldShowRational(requireActivity(), Constants.PERMISSION_STORAGE)) {
             Toast.makeText(
                     requireContext().getApplicationContext(),
-                    R.string.storage_permission_denied,
+                    R.string.storage_permission_denied_logging,
                     Toast.LENGTH_LONG)
                 .show();
           }
@@ -377,11 +394,16 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
 
   protected void handleLogging() {
     setIsLoggingActive(!loggingEnabled);
-    //    audioPlayer.playLogging(voice, loggingEnabled);
+    audioPlayer.playLogging(voice, loggingEnabled);
   }
 
   @Override
   protected void processUSBData(String data) {
+    binding.controllerContainer.speedInfo.setText(
+        getString(
+            R.string.speedInfo,
+            String.format(
+                Locale.US, "%3.0f,%3.0f", vehicle.getLeftWheelRPM(), vehicle.getRightWheelRPM())));
     sendVehicleDataToSensorService(SystemClock.elapsedRealtimeNanos(), data);
   }
 
@@ -395,16 +417,14 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
       case Constants.CMD_LOGS:
         handleLogging();
         break;
-        //      case "Constants.CMD_NOISE":
-        //        handleNoise();
-        //        break;
+
       case Constants.CMD_INDICATOR_LEFT:
       case Constants.CMD_INDICATOR_RIGHT:
       case Constants.CMD_INDICATOR_STOP:
         sendIndicatorToSensorService();
         break;
       case Constants.CMD_DRIVE_MODE:
-        setDriveMode(Enums.switchDriveMode(currentDriveMode));
+        setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode()));
         break;
 
       case Constants.CMD_DISCONNECTED:
@@ -482,7 +502,7 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
   }
 
   protected void setDriveMode(Enums.DriveMode driveMode) {
-    if (this.currentDriveMode != driveMode && driveMode != null) {
+    if (driveMode != null) {
       switch (driveMode) {
         case DUAL:
           binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_dual);
@@ -496,16 +516,13 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
       }
 
       Timber.d("Updating  driveMode: %s", driveMode);
-      this.currentDriveMode = driveMode;
+      vehicle.setDriveMode(driveMode);
       preferencesManager.setDriveMode(driveMode.getValue());
-      gameController.setDriveMode(driveMode);
     }
   }
 
   private void connectPhoneController() {
-    if (!phoneController.isConnected()) {
-      phoneController.connect(requireContext());
-    }
+    phoneController.connect(requireContext());
     Enums.DriveMode oldDriveMode = currentDriveMode;
     // Currently only dual drive mode supported
     setDriveMode(Enums.DriveMode.DUAL);
@@ -515,9 +532,7 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
   }
 
   private void disconnectPhoneController() {
-    if (phoneController.isConnected()) {
-      phoneController.disconnect(getContext());
-    }
+    phoneController.disconnect();
     setDriveMode(Enums.DriveMode.getByID(preferencesManager.getDriveMode()));
     binding.controllerContainer.driveMode.setEnabled(true);
     binding.controllerContainer.driveMode.setAlpha(1.0f);
@@ -529,11 +544,12 @@ public class LoggerFragment extends CameraFragment implements ServerCommunicatio
   protected void processFrame(Bitmap bitmap, ImageProxy image) {
     ++frameNum;
     if (binding != null) {
-      requireActivity()
-          .runOnUiThread(
-              () ->
-                  binding.frameInfo.setText(
-                      String.format(Locale.US, "%d x %d", image.getWidth(), image.getHeight())));
+      if (isAdded())
+        requireActivity()
+            .runOnUiThread(
+                () ->
+                    binding.frameInfo.setText(
+                        String.format(Locale.US, "%d x %d", image.getWidth(), image.getHeight())));
 
       if (!binding.loggerSwitch.isChecked()) return;
 

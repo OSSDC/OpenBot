@@ -1,8 +1,8 @@
 package org.openbot.robot;
 
-import static org.openbot.common.Enums.ControlMode;
-import static org.openbot.common.Enums.DriveMode;
-import static org.openbot.common.Enums.SpeedMode;
+import static org.openbot.utils.Enums.ControlMode;
+import static org.openbot.utils.Enums.DriveMode;
+import static org.openbot.utils.Enums.SpeedMode;
 
 import android.annotation.SuppressLint;
 import android.content.res.ColorStateList;
@@ -18,23 +18,23 @@ import com.google.android.material.internal.ViewUtils;
 import java.util.Locale;
 import org.jetbrains.annotations.NotNull;
 import org.openbot.R;
-import org.openbot.common.Constants;
-import org.openbot.common.Enums;
+import org.openbot.common.ControlsFragment;
 import org.openbot.databinding.FragmentFreeRoamBinding;
-import org.openbot.main.ControlsFragment;
+import org.openbot.env.PhoneController;
+import org.openbot.utils.Constants;
+import org.openbot.utils.Enums;
 import org.openbot.utils.PermissionUtils;
 import timber.log.Timber;
 
 public class FreeRoamFragment extends ControlsFragment {
 
   private FragmentFreeRoamBinding binding;
+  private PhoneController phoneController;
 
   @Override
   public View onCreateView(
       @NotNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-
     binding = FragmentFreeRoamBinding.inflate(inflater, container, false);
-
     return binding.getRoot();
   }
 
@@ -42,6 +42,9 @@ public class FreeRoamFragment extends ControlsFragment {
   @Override
   public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
     super.onViewCreated(view, savedInstanceState);
+
+    phoneController = PhoneController.getInstance(requireContext());
+    phoneController.setView(binding.videoWindow);
 
     binding.voltageInfo.setText(getString(R.string.voltageInfo, "--.-"));
     binding.controllerContainer.speedInfo.setText(getString(R.string.speedInfo, "---,---"));
@@ -57,7 +60,7 @@ public class FreeRoamFragment extends ControlsFragment {
           if (controlMode != null) setControlMode(Enums.switchControlMode(controlMode));
         });
     binding.controllerContainer.driveMode.setOnClickListener(
-        v -> setDriveMode(Enums.switchDriveMode(currentDriveMode)));
+        v -> setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode())));
 
     binding.controllerContainer.speedMode.setOnClickListener(
         v ->
@@ -86,15 +89,9 @@ public class FreeRoamFragment extends ControlsFragment {
 
     mViewModel
         .getUsbStatus()
-        .observe(
-            getViewLifecycleOwner(),
-            status -> {
-              binding.usbToggle.setChecked(status);
-              binding.usbToggle.setEnabled(!status);
-            });
+        .observe(getViewLifecycleOwner(), status -> binding.usbToggle.setChecked(status));
 
     binding.usbToggle.setChecked(vehicle.isUsbConnected());
-    binding.usbToggle.setEnabled(!vehicle.isUsbConnected());
 
     binding.usbToggle.setOnClickListener(
         v -> {
@@ -204,11 +201,21 @@ public class FreeRoamFragment extends ControlsFragment {
           break;
         case PHONE:
           binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_phone);
-          if (!PermissionUtils.hasPermission(requireContext(), Constants.PERMISSION_LOCATION))
+          if (!PermissionUtils.hasPermissions(
+              requireContext(),
+              new String[] {
+                Constants.PERMISSION_LOCATION,
+                Constants.PERMISSION_AUDIO_RECORDING,
+                Constants.PERMISSION_CAMERA
+              }))
             PermissionUtils.requestPermissions(
                 this,
-                new String[] {Constants.PERMISSION_LOCATION},
-                Constants.REQUEST_LOCATION_PERMISSION_CONTROLLER);
+                new String[] {
+                  Constants.PERMISSION_LOCATION,
+                  Constants.PERMISSION_AUDIO_RECORDING,
+                  Constants.PERMISSION_CAMERA
+                },
+                Constants.REQUEST_CONTROLLER_PERMISSIONS);
           else connectPhoneController();
 
           break;
@@ -219,7 +226,7 @@ public class FreeRoamFragment extends ControlsFragment {
   }
 
   protected void setDriveMode(DriveMode driveMode) {
-    if (this.currentDriveMode != driveMode && driveMode != null) {
+    if (driveMode != null) {
       switch (driveMode) {
         case DUAL:
           binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_dual);
@@ -233,16 +240,13 @@ public class FreeRoamFragment extends ControlsFragment {
       }
 
       Timber.d("Updating  driveMode: %s", driveMode);
-      this.currentDriveMode = driveMode;
+      vehicle.setDriveMode(driveMode);
       preferencesManager.setDriveMode(driveMode.getValue());
-      gameController.setDriveMode(driveMode);
     }
   }
 
   private void connectPhoneController() {
-    if (!phoneController.isConnected()) {
-      phoneController.connect(requireContext());
-    }
+    phoneController.connect(requireContext());
     DriveMode oldDriveMode = currentDriveMode;
     // Currently only dual drive mode supported
     setDriveMode(DriveMode.DUAL);
@@ -252,9 +256,7 @@ public class FreeRoamFragment extends ControlsFragment {
   }
 
   private void disconnectPhoneController() {
-    if (phoneController.isConnected()) {
-      phoneController.disconnect(getContext());
-    }
+    phoneController.disconnect();
     setDriveMode(DriveMode.getByID(preferencesManager.getDriveMode()));
     binding.controllerContainer.driveMode.setEnabled(true);
     binding.controllerContainer.driveMode.setAlpha(1.0f);
@@ -280,7 +282,7 @@ public class FreeRoamFragment extends ControlsFragment {
         break;
 
       case Constants.CMD_DRIVE_MODE:
-        setDriveMode(Enums.switchDriveMode(currentDriveMode));
+        setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode()));
         break;
 
       case Constants.CMD_DISCONNECTED:

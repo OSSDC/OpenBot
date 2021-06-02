@@ -16,6 +16,18 @@
         <action
             android:id="@+id/action_mainFragment_to_loggerFragment"
             app:destination="@id/loggerFragment" />
+        <action
+            android:id="@+id/action_mainFragment_to_autopilotFragment"
+            app:destination="@id/AIFragment" />
+        <action
+            android:id="@+id/action_mainFragment_to_controllerMappingFragment"
+            app:destination="@id/controllerMappingFragment" />
+        <action
+            android:id="@+id/action_mainFragment_to_objectNavFragment"
+            app:destination="@id/objectNavFragment" />
+        <action
+            android:id="@+id/action_mainFragment_to_modelManagementFragment"
+            app:destination="@id/modelManagementFragment" />
     </fragment>
     <fragment
         android:id="@+id/robotCommunicationFragment"
@@ -37,5 +49,26 @@
         android:name="org.openbot.logging.LoggerFragment"
         android:label="fragment_logger"
         tools:layout="@layout/fragment_logger" />
+    <fragment
+        android:id="@+id/AIFragment"
+        android:name="org.openbot.autopilot.AutopilotFragment"
+        android:label="fragment_ai"
+        tools:layout="@layout/fragment_autopilot" />
 
+    <fragment
+        android:id="@+id/controllerMappingFragment"
+        android:name="org.openbot.controller.ControllerMappingFragment"
+        android:label="fragment_controller_mapping"
+        tools:layout="@layout/fragment_controller_mapping" />
+    <fragment
+        android:id="@+id/objectNavFragment"
+        android:name="org.openbot.objectNav.ObjectNavFragment"
+        android:label="fragment_object_nav"
+        tools:layout="@layout/fragment_object_nav" />
+
+    <fragment
+        android:id="@+id/modelManagementFragment"
+        android:name="org.openbot.modelManagement.ModelManagementFragment"
+        android:label="fragment_model_management"
+        tools:layout="@layout/fragment_model_management" />
 </navigation>
